@@ -23,6 +23,8 @@ import subprocess
 import argparse
 from pathlib import Path
 
+from buildforge.buildsys.config import PROGRAM_DISPLAY_NAME, APP_DMG_BUILD_DIR
+
 # Import project metadata
 # Navigate up from building/apple/ to project root
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -158,12 +160,12 @@ def clean_build_dirs():
     dirs_to_clean = [
         BUILD_DIR,
         PROJECT_ROOT / "pkg_build",
-        PROJECT_ROOT / "jdxi_dmg",
+        PROJECT_ROOT / APP_DMG_BUILD_DIR,
     ]
 
     files_to_clean = [
-        PROJECT_ROOT / f"JD-Xi_Editor_{VERSION}_MacOS_Universal.pkg",
-        PROJECT_ROOT / f"JD-Xi_Editor_{VERSION}_MacOS_Universal.dmg",
+        PROJECT_ROOT / f"{PROGRAM_DISPLAY_NAME}_{VERSION}_MacOS_Universal.pkg",
+        PROJECT_ROOT / f"{PROGRAM_DISPLAY_NAME}_{VERSION}_MacOS_Universal.dmg",
     ]
 
     for path in dirs_to_clean:
@@ -366,7 +368,7 @@ def make_dmg(app_bundle_path):
         print("  ✗ App bundle not found, cannot create DMG")
         return None
 
-    dmg_name = f"JD-Xi_Editor_{VERSION}_MacOS_Universal.dmg"
+    dmg_name = f"{PROGRAM_DISPLAY_NAME}_{VERSION}_MacOS_Universal.dmg"
     volume_name = "JDXI Editor"
     build_dir = PROJECT_ROOT / "jdxi_dmg" / "JDXI-Editor"
     dmg_path = PROJECT_ROOT / dmg_name
@@ -432,7 +434,7 @@ def make_pkg(app_bundle_path):
         print("  ✗ App bundle not found, cannot create PKG")
         return None
 
-    pkg_name = f"JD-Xi_Editor_{VERSION}_MacOS_Universal.pkg"
+    pkg_name = f"{PROGRAM_DISPLAY_NAME}_{VERSION}_MacOS_Universal.pkg"
     build_dir = PROJECT_ROOT / "pkg_build"
     install_dir = build_dir / INSTALL_LOCATION.lstrip("/")
     pkg_path = PROJECT_ROOT / pkg_name

@@ -11,17 +11,24 @@ class BuildContext:
         for parent in here.parents:
             if (parent / "pyproject.toml").exists():
                 return parent
-            if (parent / "jdxi_editor").exists():
+            if (parent / "elmo").exists():
                 return parent
         raise RuntimeError("Could not locate project root")
 
     def _find_venv_python(self) -> Path:
-        if sys.platform == "win32":
-            python = self.project_root / "venv" / "Scripts" / "python.exe"
-        else:
-            python = self.project_root / "venv" / "bin" / "python"
+        # Prefer project-local envs first so builds are reproducible.
+        possible_venv_dirs = ["venv", ".venv"]
+        for venv in possible_venv_dirs:
+            if sys.platform == "win32":
+                python = self.project_root / venv / "Scripts" / "python.exe"
+            else:
+                python = self.project_root / venv / "bin" / "python"
 
-        if not python.exists():
-            raise RuntimeError("Virtualenv missing")
+            if python.exists():
+                return python
 
-        return python
+        # If already running inside a virtual environment, reuse it.
+        if sys.prefix != getattr(sys, "base_prefix", sys.prefix):
+            return Path(sys.executable).resolve()
+
+        raise RuntimeError("Virtualenv missing (expected ./venv or ./.venv)")

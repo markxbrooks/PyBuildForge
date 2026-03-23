@@ -12,31 +12,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from buildforge.buildsys.config import *
+from buildforge.buildsys.config import __program__, __version__, __project__
 from decologr import Decologr as log, setup_logging
-
-# Import project metadata
-try:
-    from jdxi_editor.project import (
-        __version__,
-        __package_name__,
-        __program__,
-        __author__,
-    )
-except ImportError:
-    # Will be set from context
-    __version__ = "0.0.0"
-    __package_name__ = "jdxi_editor"
-    __program__ = "JD-Xi Editor"
-    __author__ = "Mark Brooks"
-
-# Build configuration
-APP_NAME = "jdxi-editor"
-DESCRIPTION = "A MIDI editor and toolkit for the Roland JD-Xi synthesizer"
-MAINTAINER = "Mark Brooks <mark.x.brooks@gmail.com>"
-HOMEPAGE = "https://github.com/markxbrooks/JDXI-Editor"
-LICENSE = "MIT"
-CATEGORIES = "AudioVideo;Audio;Midi;Music;"
-
+SCRIPT_DIR = Path(__file__).parent.absolute()
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+# Metadata comes from buildforge.buildsys.config via wildcard import above.
 
 def build(ctx):
     """Main build entry point called by buildsys."""
@@ -53,7 +34,7 @@ def build(ctx):
     clean_build_dirs(build_dir, dist_dir, project_root)
     
     # Build with PyInstaller
-    pyinstaller_dist = build_with_pyinstaller(project_root)
+    pyinstaller_dist = build_with_pyinstaller(ctx)
     if pyinstaller_dist is None:
         raise RuntimeError("PyInstaller build failed")
     
@@ -83,26 +64,50 @@ def clean_build_dirs(build_dir, dist_dir, project_root):
             shutil.rmtree(path)
     
     # Also clean PyInstaller artifacts
-    for path in [project_root / "build" / __package_name__, 
-                 project_root / "dist" / __package_name__,
+    for path in [project_root / "build" / __project__, 
+                 project_root / "dist" / __project__,
                  project_root / "dist" / APP_NAME]:
         if path.exists():
             shutil.rmtree(path)
 
 
-def build_with_pyinstaller(project_root):
+def build_with_pyinstaller(ctx):
     """Build the application using PyInstaller."""
     log.message("\n📦 Building with PyInstaller...")
-    
-    entry_point = project_root / __package_name__ / "main.py"
-    icon_file = project_root / "resources" / "jdxi_icon.png"
+    project_root = ctx.project_root
+    venv_python = str(ctx.venv_python)
+
+    entry_point = project_root / __project__ / "main.py"
+    icon_file = project_root / __project__ / "resources" / "icon.png"
+    resources_dir = project_root / __project__ / "resources"
     
     if not entry_point.exists():
         log.error(f"Entry point not found: {entry_point}")
         return None
     
+    env = os.environ.copy()
+    # Avoid leaking user-site and potentially incompatible system packages into analysis.
+    env["PYTHONNOUSERSITE"] = "1"
+
+    # Ensure PyInstaller exists in the selected interpreter.
+    pyinstaller_probe = subprocess.run(
+        [venv_python, "-c", "import PyInstaller"],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if pyinstaller_probe.returncode != 0:
+        log.error(
+            "PyInstaller is not installed in selected interpreter: "
+            f"{venv_python}\nInstall with: {venv_python} -m pip install pyinstaller"
+        )
+        return None
+
     cmd = [
-        "pyinstaller",
+        venv_python,
+        "-m",
+        "PyInstaller",
         "--noconfirm",
         "--clean",
         "--onedir",
@@ -133,11 +138,16 @@ def build_with_pyinstaller(project_root):
         "--hidden-import=pubsub",
         "--hidden-import=pubsub.core",
         "--hidden-import=decologr",
+        "--hidden-import=picogl",
+        "--hidden-import=picogl.buffers.vertex.registry",
         # Collect submodules
-        "--collect-submodules=jdxi_editor",
-        "--collect-data=jdxi_editor",
-        f"--add-data={project_root / 'resources'}:resources",
+        f"--collect-submodules={__project__}",
+        "--collect-submodules=picogl",
+        "--collect-data=picogl",
+        f"--collect-data={__project__}",
     ]
+    if resources_dir.exists():
+        cmd.append(f"--add-data={resources_dir}:resources")
     
     if icon_file.exists():
         cmd.append(f"--icon={icon_file}")
@@ -145,7 +155,13 @@ def build_with_pyinstaller(project_root):
     cmd.append(str(entry_point))
     
     log.message("  This may take a few minutes...")
-    result = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd,
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     
     if result.returncode != 0:
         log.error(f"PyInstaller failed: {result.stderr}")
@@ -222,9 +238,7 @@ exec /opt/{APP_NAME}/{APP_NAME} "$@"
     create_desktop_file(desktop_dir)
     
     # Copy icons in multiple sizes
-    icon_src = project_root / "resources" / "jdxi_icon_512.png"
-    if not icon_src.exists():
-        icon_src = project_root / "resources" / "jdxi_icon.png"
+    icon_src = project_root / __project__ / "resources" / "icon.png"
     
     if icon_src.exists():
         try:
@@ -254,8 +268,7 @@ Installed-Size: {installed_size}
 Maintainer: {MAINTAINER}
 Homepage: {HOMEPAGE}
 Description: {DESCRIPTION}
- JD-Xi Editor is a comprehensive MIDI editor and toolkit
- for the Roland JD-Xi synthesizer.
+ ElMo is an extremely lightweight molecular graphics program.
 """
     (debian_dir / "control").write_text(control_content)
     
@@ -347,9 +360,7 @@ exec "${{APPDIR}}/usr/lib/{APP_NAME}/{APP_NAME}" "$@"
     shutil.copy(appdir / f"{APP_NAME}.desktop", usr_share_apps)
     
     # Copy icon
-    icon_src = project_root / "resources" / "jdxi_icon_512.png"
-    if not icon_src.exists():
-        icon_src = project_root / "resources" / "jdxi_icon.png"
+    icon_src = project_root / __project__ / "resources" / "icon.png"
     if icon_src.exists():
         shutil.copy(icon_src, appdir / f"{APP_NAME}.png")
         shutil.copy(icon_src, usr_share_icons / f"{APP_NAME}.png")
